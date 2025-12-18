@@ -3,9 +3,14 @@
 
 set -e
 
+# Определяем директорию, где находится скрипт (ДО любых cd!)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 echo "====================================="
 echo "Установка Ekzor Comments AutoSend Bot"
 echo "====================================="
+echo ""
+echo "Директория со скриптом: $SCRIPT_DIR"
 echo ""
 
 # Проверка прав root
@@ -35,7 +40,6 @@ cd /opt/ekzor_comments_autosend
 
 # Копируем файлы (предполагается, что они находятся в текущей директории)
 echo "Шаг 4: Копирование файлов бота..."
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ -f "$SCRIPT_DIR/ekzor_comments_autosend.py" ]; then
     cp "$SCRIPT_DIR/ekzor_comments_autosend.py" /opt/ekzor_comments_autosend/
     cp "$SCRIPT_DIR/requirements.txt" /opt/ekzor_comments_autosend/
