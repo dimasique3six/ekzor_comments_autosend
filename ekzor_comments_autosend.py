@@ -33,79 +33,80 @@ COMMENT_TEXT = os.getenv('COMMENT_TEXT', '🎵 Слушайте нашу муз�
 
 # ============= ОСНОВНАЯ ЛОГИКА =============
 
-async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_discussion_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Обработчик новых постов в канале.
-    Отправляет комментарий с картинкой и кнопками.
+    Обработчик сообщений в Discussion Group.
+    Отправляет комментарий с картинкой и кнопками под автоматически пересланный пост из канала.
     """
     try:
-        # Проверяем, что это сообщение из канала или автоматическая пересылка в группу обсуждений
-        message = update.channel_post or update.message
+        message = update.message
         
-        if not message:
+        # Проверяем, что это автоматическая пересылка из канала
+        if not message or not message.forward_from_chat:
             return
         
-        # Если это обычное сообщение в группе (не из канала) - игнорируем
-        if update.message and not update.message.forward_from_chat:
+        # Проверяем, что пересылка из канала (а не из другой группы)
+        if message.forward_from_chat.type != 'channel':
             return
         
-        # Определяем ID канала
-        if update.channel_post:
-            # Пост непосредственно в канале
-            channel_id = update.channel_post.chat.id
-            channel_username = f"@{update.channel_post.chat.username}" if update.channel_post.chat.username else str(channel_id)
-            logger.info(f"Новый пост в канале: {channel_username}")
-            # Для постов в канале ничего не делаем - ждем пересылки в группу
-            return
-        elif update.message and update.message.forward_from_chat:
-            # Автоматическая пересылка поста из канала в группу обсуждений
-            forward_from_chat = update.message.forward_from_chat
-            channel_username = f"@{forward_from_chat.username}" if forward_from_chat.username else str(forward_from_chat.id)
-            
-            logger.info(f"Пост из канала {channel_username} переслан в группу обсуждений")
-            
-            # Проверяем, что это пост из нашего канала
-            if CHANNEL_ID.startswith('@'):
-                if channel_username != CHANNEL_ID:
-                    return
-            else:
-                if str(forward_from_chat.id) != CHANNEL_ID.replace('@', ''):
-                    return
-            
-            # Создаем клавиатуру с кнопками
-            keyboard = [
-                [
-                    InlineKeyboardButton("💬 Чат", url=CHAT_URL),
-                    InlineKeyboardButton("🎵 Яндекс Музыка", url=MUSIC_URL)
-                ]
+        # Получаем информацию о канале
+        forward_from_chat = message.forward_from_chat
+        if forward_from_chat.username:
+            channel_username = f"@{forward_from_chat.username}"
+        else:
+            channel_username = str(forward_from_chat.id)
+        
+        logger.info(f"Обнаружена пересылка из канала {channel_username} в Discussion Group")
+        
+        # Проверяем, что это пост из нашего канала
+        if CHANNEL_ID.startswith('@'):
+            if channel_username != CHANNEL_ID:
+                logger.info(f"Пропускаем: канал {channel_username} не совпадает с {CHANNEL_ID}")
+                return
+        else:
+            # Убираем @ если он есть в CHANNEL_ID и сравниваем ID
+            expected_id = CHANNEL_ID.replace('@', '').replace('-100', '')
+            actual_id = str(forward_from_chat.id).replace('-100', '')
+            if expected_id != actual_id:
+                logger.info(f"Пропускаем: ID канала {forward_from_chat.id} не совпадает с {CHANNEL_ID}")
+                return
+        
+        logger.info(f"✅ Это наш канал! Отправляем комментарий...")
+        
+        # Создаем клавиатуру с кнопками
+        keyboard = [
+            [
+                InlineKeyboardButton("💬 Чат", url=CHAT_URL),
+                InlineKeyboardButton("🎵 Яндекс Музыка", url=MUSIC_URL)
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            # Отправляем комментарий с картинкой в группу обсуждений
-            if os.path.exists(PHOTO_PATH):
-                with open(PHOTO_PATH, 'rb') as photo:
-                    await context.bot.send_photo(
-                        chat_id=update.message.chat.id,  # ID группы обсуждений
-                        photo=photo,
-                        caption=COMMENT_TEXT,
-                        reply_markup=reply_markup,
-                        reply_to_message_id=update.message.message_id,  # Отвечаем на пересланный пост
-                        parse_mode=ParseMode.HTML
-                    )
-                logger.info(f"Комментарий с картинкой отправлен в группу обсуждений к посту {update.message.message_id}")
-            else:
-                # Если картинка не найдена, отправляем только текст
-                await context.bot.send_message(
-                    chat_id=update.message.chat.id,
-                    text=COMMENT_TEXT,
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Отправляем комментарий с картинкой в Discussion Group
+        if os.path.exists(PHOTO_PATH):
+            with open(PHOTO_PATH, 'rb') as photo:
+                sent_message = await context.bot.send_photo(
+                    chat_id=message.chat.id,  # ID Discussion Group
+                    photo=photo,
+                    caption=COMMENT_TEXT,
                     reply_markup=reply_markup,
-                    reply_to_message_id=update.message.message_id,
+                    reply_to_message_id=message.message_id,  # Отвечаем на пересланный пост
                     parse_mode=ParseMode.HTML
                 )
-                logger.warning(f"Картинка не найдена: {PHOTO_PATH}. Отправлен только текст.")
+            logger.info(f"✅ Комментарий с картинкой отправлен! Message ID: {sent_message.message_id}")
+        else:
+            # Если картинка не найдена, отправляем только текст
+            sent_message = await context.bot.send_message(
+                chat_id=message.chat.id,
+                text=COMMENT_TEXT,
+                reply_markup=reply_markup,
+                reply_to_message_id=message.message_id,
+                parse_mode=ParseMode.HTML
+            )
+            logger.warning(f"⚠️ Картинка не найдена: {PHOTO_PATH}. Отправлен только текст. Message ID: {sent_message.message_id}")
         
     except Exception as e:
-        logger.error(f"Ошибка при обработке поста: {e}", exc_info=True)
+        logger.error(f"❌ Ошибка при обработке сообщения: {e}", exc_info=True)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -115,27 +116,38 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Запуск бота"""
-    logger.info("Запуск бота...")
+    logger.info("=" * 60)
+    logger.info("Запуск Ekzor Comments AutoSend Bot...")
+    logger.info("=" * 60)
     
     # Проверка конфигурации
     if BOT_TOKEN == 'YOUR_BOT_TOKEN_HERE':
-        logger.error("ОШИБКА: Не указан BOT_TOKEN!")
-        logger.error("Установите переменную окружения BOT_TOKEN или отредактируйте файл")
+        logger.error("❌ ОШИБКА: Не указан BOT_TOKEN!")
+        logger.error("Установите переменную окружения BOT_TOKEN или отредактируйте файл .env")
         return
+    
+    logger.info(f"📢 Отслеживаемый канал: {CHANNEL_ID}")
+    logger.info(f"🖼️  Путь к картинке: {PHOTO_PATH}")
+    logger.info(f"📁 Картинка существует: {os.path.exists(PHOTO_PATH)}")
     
     # Создаем приложение
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Регистрируем обработчики для постов в канале и сообщений в группе обсуждений
-    application.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
-    application.add_handler(MessageHandler(filters.ChatType.SUPERGROUP | filters.ChatType.GROUP, handle_channel_post))
+    # Регистрируем обработчик ТОЛЬКО для сообщений в группах (Discussion Group)
+    # Фильтруем только сообщения с forward_from_chat (автоматические пересылки из канала)
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.SUPERGROUP & filters.FORWARDED,
+            handle_discussion_message
+        )
+    )
     
     # Регистрируем обработчик ошибок
     application.add_error_handler(error_handler)
     
-    logger.info("Бот запущен и готов к работе!")
-    logger.info(f"Отслеживаемый канал: {CHANNEL_ID}")
-    logger.info(f"Путь к картинке: {PHOTO_PATH}")
+    logger.info("✅ Бот запущен и готов к работе!")
+    logger.info("🔍 Ожидаю автоматические пересылки постов из канала в Discussion Group...")
+    logger.info("=" * 60)
     
     # Запускаем бота
     application.run_polling(allowed_updates=Update.ALL_TYPES)
