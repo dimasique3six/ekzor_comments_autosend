@@ -35,14 +35,15 @@ cd /opt/ekzor_comments_autosend
 
 # Копируем файлы (предполагается, что они находятся в текущей директории)
 echo "Шаг 4: Копирование файлов бота..."
-if [ -f ~/ekzor_comments_autosend.py ]; then
-    cp ~/ekzor_comments_autosend.py /opt/ekzor_comments_autosend/
-    cp ~/requirements.txt /opt/ekzor_comments_autosend/
-    cp ~/.env.example /opt/ekzor_comments_autosend/
-    echo "Файлы скопированы"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -f "$SCRIPT_DIR/ekzor_comments_autosend.py" ]; then
+    cp "$SCRIPT_DIR/ekzor_comments_autosend.py" /opt/ekzor_comments_autosend/
+    cp "$SCRIPT_DIR/requirements.txt" /opt/ekzor_comments_autosend/
+    cp "$SCRIPT_DIR/.env.example" /opt/ekzor_comments_autosend/
+    echo "Файлы скопированы из $SCRIPT_DIR"
 else
-    echo "ОШИБКА: Файлы бота не найдены в домашней директории"
-    echo "Пожалуйста, поместите файлы в ~/ перед запуском установки"
+    echo "ОШИБКА: Файлы бота не найдены в директории $SCRIPT_DIR"
+    echo "Пожалуйста, запустите скрипт из директории с файлами бота"
     exit 1
 fi
 
@@ -81,14 +82,16 @@ sed -i '1s|.*|#!/opt/ekzor_comments_autosend/venv/bin/python3|' /opt/ekzor_comme
 
 # Устанавливаем systemd service
 echo "Шаг 11: Установка systemd service..."
-if [ -f ~/ekzor_comments_autosend.service ]; then
+if [ -f "$SCRIPT_DIR/ekzor_comments_autosend.service" ]; then
     # Обновляем пути в service файле
-    sed -i "s|ExecStart=/usr/bin/python3|ExecStart=/opt/ekzor_comments_autosend/venv/bin/python3|" ~/ekzor_comments_autosend.service
-    cp ~/ekzor_comments_autosend.service /etc/systemd/system/
+    cp "$SCRIPT_DIR/ekzor_comments_autosend.service" /tmp/ekzor_comments_autosend.service
+    sed -i "s|ExecStart=/usr/bin/python3|ExecStart=/opt/ekzor_comments_autosend/venv/bin/python3|" /tmp/ekzor_comments_autosend.service
+    cp /tmp/ekzor_comments_autosend.service /etc/systemd/system/
+    rm /tmp/ekzor_comments_autosend.service
     systemctl daemon-reload
     echo "Service установлен"
 else
-    echo "ПРЕДУПРЕЖДЕНИЕ: файл ekzor_comments_autosend.service не найден"
+    echo "ПРЕДУПРЕЖДЕНИЕ: файл ekzor_comments_autosend.service не найден в $SCRIPT_DIR"
 fi
 
 echo ""
