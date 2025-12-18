@@ -45,29 +45,37 @@ async def handle_discussion_message(update: Update, context: ContextTypes.DEFAUL
         logger.info("🔔 Получено сообщение!")
         logger.info(f"Chat ID: {message.chat.id if message else 'N/A'}")
         logger.info(f"Chat type: {message.chat.type if message else 'N/A'}")
-        logger.info(f"Forward from chat: {message.forward_from_chat if message else 'N/A'}")
+        logger.info(f"Is automatic forward: {message.is_automatic_forward if message else 'N/A'}")
+        logger.info(f"Forward origin: {message.forward_origin if message else 'N/A'}")
         
         # Проверяем, что это автоматическая пересылка из канала
-        if not message or not message.forward_from_chat:
-            logger.info("❌ Это не пересылка из канала, пропускаем")
+        if not message or not message.is_automatic_forward:
+            logger.info("❌ Это не автоматическая пересылка из канала, пропускаем")
             logger.info("=" * 60)
             return
         
-        # Проверяем, что пересылка из канала (а не из другой группы)
-        if message.forward_from_chat.type != 'channel':
-            logger.info(f"❌ Пересылка не из канала, а из: {message.forward_from_chat.type}")
+        # Получаем информацию об источнике пересылки
+        if not message.forward_origin:
+            logger.info("❌ Нет информации об источнике пересылки")
+            logger.info("=" * 60)
+            return
+        
+        # Проверяем что это пересылка из канала
+        from telegram import MessageOriginChannel
+        if not isinstance(message.forward_origin, MessageOriginChannel):
+            logger.info(f"❌ Пересылка не из канала, тип: {type(message.forward_origin)}")
             logger.info("=" * 60)
             return
         
         # Получаем информацию о канале
-        forward_from_chat = message.forward_from_chat
-        if forward_from_chat.username:
-            channel_username = f"@{forward_from_chat.username}"
+        forward_channel = message.forward_origin.chat
+        if forward_channel.username:
+            channel_username = f"@{forward_channel.username}"
         else:
-            channel_username = str(forward_from_chat.id)
+            channel_username = str(forward_channel.id)
         
-        logger.info(f"✅ Обнаружена пересылка из канала {channel_username} в Discussion Group")
-        logger.info(f"ID канала из пересылки: {forward_from_chat.id}")
+        logger.info(f"✅ Обнаружена автоматическая пересылка из канала {channel_username} в Discussion Group")
+        logger.info(f"ID канала из пересылки: {forward_channel.id}")
         logger.info(f"Ожидаемый CHANNEL_ID: {CHANNEL_ID}")
         
         # Проверяем, что это пост из нашего канала
@@ -79,10 +87,10 @@ async def handle_discussion_message(update: Update, context: ContextTypes.DEFAUL
         else:
             # Убираем @ если он есть в CHANNEL_ID и сравниваем ID
             expected_id = CHANNEL_ID.replace('@', '').replace('-100', '')
-            actual_id = str(forward_from_chat.id).replace('-100', '')
+            actual_id = str(forward_channel.id).replace('-100', '')
             logger.info(f"Сравнение ID: expected={expected_id}, actual={actual_id}")
             if expected_id != actual_id:
-                logger.info(f"❌ Пропускаем: ID канала {forward_from_chat.id} не совпадает с {CHANNEL_ID}")
+                logger.info(f"❌ Пропускаем: ID канала {forward_channel.id} не совпадает с {CHANNEL_ID}")
                 logger.info("=" * 60)
                 return
         
