@@ -41,12 +41,22 @@ async def handle_discussion_message(update: Update, context: ContextTypes.DEFAUL
     try:
         message = update.message
         
+        logger.info("=" * 60)
+        logger.info("🔔 Получено сообщение!")
+        logger.info(f"Chat ID: {message.chat.id if message else 'N/A'}")
+        logger.info(f"Chat type: {message.chat.type if message else 'N/A'}")
+        logger.info(f"Forward from chat: {message.forward_from_chat if message else 'N/A'}")
+        
         # Проверяем, что это автоматическая пересылка из канала
         if not message or not message.forward_from_chat:
+            logger.info("❌ Это не пересылка из канала, пропускаем")
+            logger.info("=" * 60)
             return
         
         # Проверяем, что пересылка из канала (а не из другой группы)
         if message.forward_from_chat.type != 'channel':
+            logger.info(f"❌ Пересылка не из канала, а из: {message.forward_from_chat.type}")
+            logger.info("=" * 60)
             return
         
         # Получаем информацию о канале
@@ -56,22 +66,27 @@ async def handle_discussion_message(update: Update, context: ContextTypes.DEFAUL
         else:
             channel_username = str(forward_from_chat.id)
         
-        logger.info(f"Обнаружена пересылка из канала {channel_username} в Discussion Group")
+        logger.info(f"✅ Обнаружена пересылка из канала {channel_username} в Discussion Group")
+        logger.info(f"ID канала из пересылки: {forward_from_chat.id}")
+        logger.info(f"Ожидаемый CHANNEL_ID: {CHANNEL_ID}")
         
         # Проверяем, что это пост из нашего канала
         if CHANNEL_ID.startswith('@'):
             if channel_username != CHANNEL_ID:
-                logger.info(f"Пропускаем: канал {channel_username} не совпадает с {CHANNEL_ID}")
+                logger.info(f"❌ Пропускаем: канал {channel_username} не совпадает с {CHANNEL_ID}")
+                logger.info("=" * 60)
                 return
         else:
             # Убираем @ если он есть в CHANNEL_ID и сравниваем ID
             expected_id = CHANNEL_ID.replace('@', '').replace('-100', '')
             actual_id = str(forward_from_chat.id).replace('-100', '')
+            logger.info(f"Сравнение ID: expected={expected_id}, actual={actual_id}")
             if expected_id != actual_id:
-                logger.info(f"Пропускаем: ID канала {forward_from_chat.id} не совпадает с {CHANNEL_ID}")
+                logger.info(f"❌ Пропускаем: ID канала {forward_from_chat.id} не совпадает с {CHANNEL_ID}")
+                logger.info("=" * 60)
                 return
         
-        logger.info(f"✅ Это наш канал! Отправляем комментарий...")
+        logger.info(f"✅✅✅ Это наш канал! Отправляем комментарий...")
         
         # Создаем клавиатуру с кнопками
         keyboard = [
@@ -105,8 +120,11 @@ async def handle_discussion_message(update: Update, context: ContextTypes.DEFAUL
             )
             logger.warning(f"⚠️ Картинка не найдена: {PHOTO_PATH}. Отправлен только текст. Message ID: {sent_message.message_id}")
         
+        logger.info("=" * 60)
+        
     except Exception as e:
         logger.error(f"❌ Ошибка при обработке сообщения: {e}", exc_info=True)
+        logger.info("=" * 60)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
