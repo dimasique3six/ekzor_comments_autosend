@@ -1,0 +1,28 @@
+[Unit]
+Description=Ekzor Comments AutoSend Bot
+After=network.target
+
+[Service]
+Type=simple
+User=telegram-bot
+Group=telegram-bot
+WorkingDirectory=/opt/ekzor_comments_autosend
+EnvironmentFile=/opt/ekzor_comments_autosend/.env
+ExecStart=/usr/bin/python3 /opt/ekzor_comments_autosend/ekzor_comments_autosend.py
+Restart=always
+RestartSec=10
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ekzor_comments_autosend
+
+# Безопасность
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log
+
+[Install]
+WantedBy=multi-user.target
