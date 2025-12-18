@@ -39,53 +39,70 @@ async def handle_channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE
     Отправляет комментарий с картинкой и кнопками.
     """
     try:
-        # Проверяем, что пост из нужного канала
-        if update.channel_post.chat.username:
-            channel_username = f"@{update.channel_post.chat.username}"
-        else:
-            channel_username = str(update.channel_post.chat.id)
+        # Проверяем, что это сообщение из канала или автоматическая пересылка в группу обсуждений
+        message = update.channel_post or update.message
         
-        logger.info(f"Новый пост в канале: {channel_username}")
+        if not message:
+            return
         
-        # Если это не наш канал - игнорируем
-        if CHANNEL_ID.startswith('@'):
-            if channel_username != CHANNEL_ID:
-                return
-        else:
-            if str(update.channel_post.chat.id) != CHANNEL_ID.replace('@', ''):
-                return
+        # Если это обычное сообщение в группе (не из канала) - игнорируем
+        if update.message and not update.message.forward_from_chat:
+            return
         
-        # Создаем клавиатуру с кнопками
-        keyboard = [
-            [
-                InlineKeyboardButton("💬 Чат", url=CHAT_URL),
-                InlineKeyboardButton("🎵 Яндекс Музыка", url=MUSIC_URL)
+        # Определяем ID канала
+        if update.channel_post:
+            # Пост непосредственно в канале
+            channel_id = update.channel_post.chat.id
+            channel_username = f"@{update.channel_post.chat.username}" if update.channel_post.chat.username else str(channel_id)
+            logger.info(f"Новый пост в канале: {channel_username}")
+            # Для постов в канале ничего не делаем - ждем пересылки в группу
+            return
+        elif update.message and update.message.forward_from_chat:
+            # Автоматическая пересылка поста из канала в группу обсуждений
+            forward_from_chat = update.message.forward_from_chat
+            channel_username = f"@{forward_from_chat.username}" if forward_from_chat.username else str(forward_from_chat.id)
+            
+            logger.info(f"Пост из канала {channel_username} переслан в группу обсуждений")
+            
+            # Проверяем, что это пост из нашего канала
+            if CHANNEL_ID.startswith('@'):
+                if channel_username != CHANNEL_ID:
+                    return
+            else:
+                if str(forward_from_chat.id) != CHANNEL_ID.replace('@', ''):
+                    return
+            
+            # Создаем клавиатуру с кнопками
+            keyboard = [
+                [
+                    InlineKeyboardButton("💬 Чат", url=CHAT_URL),
+                    InlineKeyboardButton("🎵 Яндекс Музыка", url=MUSIC_URL)
+                ]
             ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # Отправляем комментарий с картинкой
-        if os.path.exists(PHOTO_PATH):
-            with open(PHOTO_PATH, 'rb') as photo:
-                await context.bot.send_photo(
-                    chat_id=update.channel_post.chat.id,
-                    photo=photo,
-                    caption=COMMENT_TEXT,
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Отправляем комментарий с картинкой в группу обсуждений
+            if os.path.exists(PHOTO_PATH):
+                with open(PHOTO_PATH, 'rb') as photo:
+                    await context.bot.send_photo(
+                        chat_id=update.message.chat.id,  # ID группы обсуждений
+                        photo=photo,
+                        caption=COMMENT_TEXT,
+                        reply_markup=reply_markup,
+                        reply_to_message_id=update.message.message_id,  # Отвечаем на пересланный пост
+                        parse_mode=ParseMode.HTML
+                    )
+                logger.info(f"Комментарий с картинкой отправлен в группу обсуждений к посту {update.message.message_id}")
+            else:
+                # Если картинка не найдена, отправляем только текст
+                await context.bot.send_message(
+                    chat_id=update.message.chat.id,
+                    text=COMMENT_TEXT,
                     reply_markup=reply_markup,
-                    reply_to_message_id=update.channel_post.message_id,
+                    reply_to_message_id=update.message.message_id,
                     parse_mode=ParseMode.HTML
                 )
-            logger.info(f"Комментарий с картинкой отправлен к посту {update.channel_post.message_id}")
-        else:
-            # Если картинка не найдена, отправляем только текст
-            await context.bot.send_message(
-                chat_id=update.channel_post.chat.id,
-                text=COMMENT_TEXT,
-                reply_markup=reply_markup,
-                reply_to_message_id=update.channel_post.message_id,
-                parse_mode=ParseMode.HTML
-            )
-            logger.warning(f"Картинка не найдена: {PHOTO_PATH}. Отправлен только текст.")
+                logger.warning(f"Картинка не найдена: {PHOTO_PATH}. Отправлен только текст.")
         
     except Exception as e:
         logger.error(f"Ошибка при обработке поста: {e}", exc_info=True)
@@ -109,8 +126,9 @@ def main() -> None:
     # Создаем приложение
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Регистрируем обработчик постов в канале
+    # Регистрируем обработчики для постов в канале и сообщений в группе обсуждений
     application.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_channel_post))
+    application.add_handler(MessageHandler(filters.ChatType.SUPERGROUP | filters.ChatType.GROUP, handle_channel_post))
     
     # Регистрируем обработчик ошибок
     application.add_error_handler(error_handler)
